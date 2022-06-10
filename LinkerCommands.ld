@@ -29,6 +29,34 @@ SECTIONS
 
     .text :
     {
-        *(.text*)
+        . = ALIGN(4);
+        /* KEEP(*(.ISR_VECTOR_TABLE)) */
+        *(.text)
+        *(.rodata)
+        *(.const)
+    
     } > FALSH
+
+    .data :
+    {
+        . = ALIGN(4);           /* 32 bit bus bandwidth */
+        
+        __data_start = .;
+        *(.data)
+        . = ALIGN(4);           /* 32 bit bus bandwidth */
+        __data_end = .;
+
+    }> SRAM0_3 AT > FALSH
+    
+	__data_load= LOADADDR(.data);	/*Fetch load address from LoadMemoAddr([physical])*/
+
+    .bss :
+    {
+        . = ALIGN(4);           /* 32 bit bus bandwidth */
+        __bss_start = .;
+        *(.bss)
+        *(.common)
+        . = ALIGN(4);           /* 32 bit bus bandwidth */
+        __bss_end = .;
+    }  > SRAM0_3
 }

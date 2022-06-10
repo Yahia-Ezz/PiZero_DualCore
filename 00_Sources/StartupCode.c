@@ -1,34 +1,49 @@
 #include <stdint.h>
-
+#include "XIP.h"
 void ResetHandler(void) __attribute__((section(".BLINK"))); // explicitly save the ResetHandler function in the .Blink Section
 extern int main(void);
 
-#define RESETS_RESET_BASE_ADDRESS       *((volatile uint32_t*) (0x4000C000 + 0x00) )
-#define RESETS_DONE_BASE_ADDRESS        *((volatile uint32_t*) (0x4000C000 + 0x08) )
-
-#define GPIO_OUT_SET_BASE_ADDRESS       *((volatile uint32_t*) (0xD0000000 + 0x14) )
-#define GPIO_OUT_CLR_BASE_ADDRESS       *((volatile uint32_t*) (0xD0000000 + 0x18) )
-#define GPIO_OE_BASE_ADDRESS            *((volatile uint32_t*) (0xD0000000 + 0x20) )
-#define GPIO_OE_SET_BASE_ADDRESS        *((volatile uint32_t*) (0xD0000000 + 0x24) )
-#define GPIO_OE_CLR_BASE_ADDRESS        *((volatile uint32_t*) (0xD0000000 + 0x28) )
+extern uint32_t __data_start;
+extern uint32_t __data_end;
+extern uint32_t __data_load;
+extern uint32_t __bss_start;
+extern uint32_t __bss_end;
 
 
-#define GPIO_25_CTRL_BASE_ADDRESS       *((volatile uint32_t*) (0x40014000 + 0xCC) )
-
-void ResetHandler(void) 
+#define XIP_SSI_BASE_ADDRESS 	0x18000000
+#define DFS_32 	16U
+#define TMOD 	8U
+void ResetHandler(void)  
 {
-     /* Release IO_BANK0 from reset */
-    RESETS_RESET_BASE_ADDRESS &=~ (1<<5);
+	volatile uint32_t *SRC, *DEST;
+	struct XIP_SSI_t *XIP_SSI = (void*)XIP_SSI_BASE_ADDRESS;
 
-    /* Wait for reset to be finish */
-    while( !(RESETS_DONE_BASE_ADDRESS & (1<<5)) );
+	/* INIT XIP as master */
+	
+	XIP_SSI->SSIENR = 0;	//Disable serial devices
 
-    /* set the function select to SIO */
-    GPIO_25_CTRL_BASE_ADDRESS = 0x5;
+	XIP_SSI->CTRLR0 |= 	((32-1)<<DFS_32)	|
+						(0x3<<TMOD);				
 
-    /* Enable LED */
-    GPIO_OE_SET_BASE_ADDRESS |= (1<<25);
-    GPIO_OUT_SET_BASE_ADDRESS |= (1<<25);
+	XIP_SSI->CTRLR1 = 0;  // 1 frame ( n -1 )
 
+	XIP_SSI->SSIENR = 1; 	//Disable serial devices
+
+
+	/* Clear Non initialized Variables - Variables set to 0 and static variables */
+	for (DEST = &__bss_start; DEST < &__bss_end; DEST++)
+	{
+		*DEST = (uint32_t) 0X0U;
+	}
+
+	/*Load .data variables from FLASH to RAM*/
+	for (SRC = &__data_load, DEST = &__data_start; DEST < &__data_end;	SRC++, DEST++)
+	{
+		*DEST = *SRC;
+	}
+ 
+	/* Mark the End of Stack to check for Overflow  */
+	*((volatile uint32_t*) &__bss_end) = 0xDEADBEEF;
+ 
     main(); 
-}
+} 
